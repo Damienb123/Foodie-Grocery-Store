@@ -31,6 +31,7 @@ import CheckoutSummary from './components/CheckoutSummary';
 import LoginPage from './layouts/LoginPage'; 
 import RegisterPage from './layouts/RegisterPage'; 
 import { CartProvider } from './components/CartContext';
+import FoodieAI from './components/FoodieAI';
 
 function App() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -69,6 +70,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
         </Routes>
+        <FoodieAI />
         <Footer />
       </Router>
     </CartProvider>
