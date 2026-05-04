@@ -6,6 +6,7 @@ import { IconContext } from "react-icons";
 import { CartContext } from '../components/CartContext';
 import ExploreProducts from '../components/ExploreProducts';
 import ProductCard from '../components/ProductCard';
+
 import {
   beveragesProducts,
   bbqProducts,
