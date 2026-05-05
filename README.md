@@ -1,26 +1,47 @@
-# Foodie Grocery Store
+# Online Shopping System
 
-## Overview
+Online Shopping System is a grocery-style e-commerce app with a React storefront, a FastAPI and MariaDB backend, and an optional AI shopping assistant called Foodie AI. The storefront lets shoppers browse categories, search the catalog, manage a cart, review checkout totals, and ask the assistant for product or recipe-based shopping suggestions.
 
-Online Shopping System is a full-stack e-commerce application for browsing grocery-style product categories, searching an item catalog, managing a shopping cart, and supporting administrative data operations for users, items, discounts, sales items, and orders.
+Foodie AI runs as a separate FastAPI service. The React widget sends the user's message, recent chat history, and current frontend catalog data to the assistant service. The assistant can also fetch inventory from the main backend API. When an OpenAI API key is configured, it uses the OpenAI Responses API; without a key, it falls back to simple inventory keyword matching so the UI remains testable.
 
-The customer-facing frontend focuses on product discovery and cart management. Users can browse categories such as produce, dairy, pantry, bakery, household, pet, seasonal, and sale items. The shared search bar matches products by name, description, and identifiers, then routes users to a search results page where matching items can be sorted by price or availability.
+## Features
 
-The cart flow uses React context so cart state is shared across pages. When a user adds an item already in the cart, the quantity increases instead of creating duplicate rows. When a user removes an item, the quantity decreases until only one remains, then the item is removed from the cart entirely. The checkout summary calculates subtotal, discount, tax at 8.25%, and final total so the shopper can review the order before placement.
-
-The backend is a FastAPI service using SQLModel and MariaDB. It exposes routes for retrieving and managing users, items, discount codes, sales items, current orders, and historical orders. This gives the project a database-backed foundation for e-commerce catalog management and administrative workflows.
-
-## Key Features
-
-- Category-based product browsing for grocery and household shopping flows
-- Search suggestions that match product names, descriptions, and identifiers
+- Category browsing for grocery, household, baby, pet, seasonal, sale, and specialty product groups
+- Shared search across product names, descriptions, and identifiers
 - Search results with sorting by price and availability
-- Product cards with images, descriptions, prices, identifiers, and add-to-cart actions
-- Shared cart state across pages using React context
-- Quantity-aware cart updates for adding and removing repeated items
+- Product cards with images, prices, stock counts, identifiers, and add-to-cart actions
+- React cart context with quantity-aware add and remove behavior
 - Checkout summary with subtotal, discount, tax, and total calculations
-- Backend API routes for users, items, discount codes, sales items, and orders
-- Multi-stage frontend container build that compiles the Vite app and serves it with Nginx
+- FastAPI routes for users, items, discount codes, sales items, current orders, and order history
+- Foodie AI chat drawer for grocery suggestions, product matches, and recipe shopping help
+- Assistant guardrails that keep cart changes in the application layer instead of the AI model
+- Multi-stage frontend Docker build served by Nginx
+
+## Architecture
+
+```text
+React + Vite storefront
+  |
+  |-- browsing, search, cart, checkout
+  |
+  |-- FoodieAI.jsx chat widget
+        |
+        | POST /assistant/chat
+        v
+Foodie AI assistant API, port 8011
+  |
+  |-- uses frontend-provided inventory when available
+  |-- can fetch GET /items from the main backend
+  |-- calls OpenAI when OPENAI_API_KEY is set
+        |
+        v
+Main FastAPI backend, port 8000
+  |
+  v
+MariaDB
+```
+
+The assistant is advisory only. It can recommend items, substitutions, and shopping lists, but it does not add, remove, or modify cart contents. Cart actions remain explicit user actions in the React app.
 
 ## Tech Stack
 
@@ -32,7 +53,7 @@ The backend is a FastAPI service using SQLModel and MariaDB. It exposes routes f
 - Tailwind CSS
 - daisyUI
 - Font Awesome and React Icons
-- Nginx for serving the production frontend container
+- Nginx for the production frontend container
 
 ### Backend
 
@@ -42,137 +63,174 @@ The backend is a FastAPI service using SQLModel and MariaDB. It exposes routes f
 - Pydantic
 - Uvicorn
 - MariaDB connector
-- Passlib for password hashing
-- PDM for Python dependency and script management
+- Passlib
+- PDM
 
-### Data and Configuration
+### AI Assistant
 
-- MariaDB database connection configured through environment variables
-- SQLModel models for users, public users, items, public items, sales items, discount codes, and orders
-- Frontend product data currently organized in React modules and category components
+- FastAPI assistant service in `agent-backend/`
+- OpenAI Python SDK
+- `httpx` for inventory fetches
+- `python-dotenv` for local configuration
+- CORS configured for local Vite origins
 
-## Problems Solved
+## Project Structure
 
-### Product Search and Discovery
+```text
+.
++-- app.py                         # Main FastAPI application entry point
++-- back_end/                      # API routes, database setup, models, and security helpers
++-- agent-backend/
+|   +-- main.py                    # Foodie AI assistant API
+|   +-- AGENTS.md                  # Assistant behavior and safety rules
++-- front-end/
+|   +-- Dockerfile                 # Multi-stage frontend container build
+|   +-- src/App.jsx                # React routes and global app shell
+|   +-- src/components/FoodieAI.jsx # Chat assistant drawer
+|   +-- src/components/Stock.jsx   # Frontend product catalog aggregation
+|   +-- src/components/            # Product, search, cart, checkout, and category components
+|   +-- src/layouts/               # Navigation, page layout, login, and register views
++-- pyproject.toml                 # Python dependencies and PDM scripts
++-- .env.template                  # Local environment variable template
++-- README.md
+```
 
-The project solves a common e-commerce discovery problem: shoppers need to find products quickly without knowing the exact category path. Search checks product names, descriptions, and product identifiers, which allows users to find items through multiple types of input.
+## Reproduce the Full App Locally
 
-Search suggestions are deduplicated and prioritized so products whose names start with the query appear first. The results page also supports sorting by price from low to high, price from high to low, and availability. This helps users compare matching products and quickly identify affordable or in-stock options.
+Run these commands from the project root unless a step says otherwise.
 
-### Adding Items to a Cart
-
-Product cards expose a direct add-to-cart action, making the shopping flow simple from category pages and search results. The cart logic checks whether the selected product already exists in the cart. If it does, the item quantity is incremented; if not, the product is added as a new cart line with a starting quantity of one.
-
-This approach keeps the cart readable and avoids duplicate entries for the same item.
-
-### Removing Items from a Cart
-
-The checkout page gives users a clear way to remove items. Removal is quantity-aware: if the cart contains multiple units of the same item, removing it decrements the quantity by one. If only one unit remains, the item is removed from the cart entirely.
-
-This mirrors expected shopping cart behavior and lets shoppers correct quantities without accidentally clearing unrelated cart data.
-
-### Checkout Calculations
-
-The checkout summary centralizes pricing calculations. It calculates the subtotal from item price and quantity, applies supported discount codes, computes tax at 8.25%, and displays the final total.
-
-This solves the transparency problem for shoppers by showing how the order total is built before placement.
-
-### Frontend Containerization
-
-The frontend is containerized with a multi-stage Dockerfile:
-
-1. A Node 18 build stage installs dependencies from `package.json` and `package-lock.json`.
-2. Vite compiles the React application into static production assets.
-3. A lightweight `nginx:stable-alpine` runtime image serves the compiled frontend from `/usr/share/nginx/html`.
-
-This keeps the final image focused on serving the production build instead of shipping the full Node development environment. The result is a smaller and more reproducible frontend deployment path.
-
-## Reproducibility Steps
-
-These steps assume the repository has been cloned locally and that commands are run from the project root.
-
-### Prerequisites
+### 1. Prerequisites
 
 - Node.js 18 or newer
 - npm
 - Python 3.11
 - PDM
 - MariaDB
-- Docker, if running the frontend container
+- An OpenAI API key for full assistant responses
+- Docker, only if you want to run the frontend container
 
-### Backend Setup
-
-1. Install Python dependencies:
-
-   ```bash
-   pdm install
-   ```
-
-2. Create a `.env` file in the project root with the database connection values expected by `back_end/core/config.py`:
-
-   ```env
-   DB_USERNAME=your_database_user
-   DB_PASSWORD=your_database_password
-   DB_HOST=localhost
-   DB_PORT=3306
-   DB_NAME=online_shopping_system
-   ```
-
-3. Make sure the MariaDB database exists and is reachable with those credentials.
-
-4. Start the FastAPI development server:
-
-   ```bash
-   pdm run fastapi-dev
-   ```
-
-5. Open the API locally:
-
-   ```text
-   http://127.0.0.1:8000
-   ```
-
-### Frontend Setup
-
-1. Move into the frontend project:
-
-   ```bash
-   cd front-end
-   ```
-
-2. Install frontend dependencies:
-
-   ```bash
-   npm install
-   ```
-
-3. Start the Vite development server:
-
-   ```bash
-   npm run dev
-   ```
-
-4. Open the local Vite URL shown in the terminal, typically:
-
-   ```text
-   http://localhost:5173
-   ```
-
-### Build the Frontend Locally
-
-From the `front-end` directory:
+### 2. Install Python Dependencies
 
 ```bash
-npm run build
+pdm install
 ```
 
-The production build output is written to:
+This installs dependencies for both FastAPI services: the main backend and the Foodie AI assistant backend.
+
+### 3. Configure Environment Variables
+
+Create `.env` in the project root. You can start from `.env.template`, but replace secrets with your own values.
+
+```env
+DB_USERNAME=your_database_user
+DB_PASSWORD=your_database_password
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=online_shopping_system
+
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-5.2
+INVENTORY_API_URL=http://127.0.0.1:8000/items
+AGENT_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+VITE_AGENT_API_URL=http://127.0.0.1:8011
+```
+
+Do not commit real API keys or database passwords. If `OPENAI_API_KEY` is omitted, the assistant API still runs, but it returns fallback inventory matches instead of model-generated responses.
+
+### 4. Prepare MariaDB
+
+Create a MariaDB database that matches `DB_NAME`:
+
+```sql
+CREATE DATABASE online_shopping_system;
+```
+
+Make sure the configured database user can connect to it. The main backend builds its SQLModel connection URL from the `DB_*` variables in `.env`.
+
+### 5. Start the Main Backend API
+
+```bash
+pdm run fastapi-dev
+```
+
+The main backend runs at:
 
 ```text
-front-end/dist
+http://127.0.0.1:8000
 ```
 
-### Run the Frontend with Docker
+Useful checks:
+
+```text
+GET http://127.0.0.1:8000/
+GET http://127.0.0.1:8000/items
+```
+
+### 6. Start the Foodie AI Assistant API
+
+Open a second terminal in the project root:
+
+```bash
+pdm run agent-dev
+```
+
+The assistant backend runs at:
+
+```text
+http://127.0.0.1:8011
+```
+
+Useful checks:
+
+```text
+GET http://127.0.0.1:8011/
+GET http://127.0.0.1:8011/inventory
+POST http://127.0.0.1:8011/assistant/chat
+```
+
+The assistant endpoint expects a JSON body like:
+
+```json
+{
+  "message": "Help me shop for chicken alfredo",
+  "inventory": [],
+  "history": []
+}
+```
+
+If `inventory` is empty, the assistant service tries to fetch current inventory from `INVENTORY_API_URL`.
+
+### 7. Start the React Frontend
+
+Open a third terminal:
+
+```bash
+cd front-end
+npm install
+npm run dev
+```
+
+Open the Vite URL shown in the terminal, usually:
+
+```text
+http://localhost:5173
+```
+
+The Foodie AI button appears as a floating assistant control on the storefront. Open it and try:
+
+```text
+Help me shop for chicken alfredo
+Suggest snacks for a movie night
+I need milk and eggs
+```
+
+For the full assistant experience, keep all three services running:
+
+- Main backend: `http://127.0.0.1:8000`
+- Assistant backend: `http://127.0.0.1:8011`
+- Frontend: `http://localhost:5173`
+
+## Build and Run the Frontend Container
 
 From the `front-end` directory:
 
@@ -187,33 +245,47 @@ Then open:
 http://localhost:8080
 ```
 
+If the containerized frontend needs to talk to the local assistant service, set the appropriate Vite environment value before building so `VITE_AGENT_API_URL` points to a reachable assistant API URL from the browser.
+
 ## API Surface
 
-The FastAPI backend currently includes routes for:
+### Main Backend
 
 - `GET /` health-style root response
-- `GET /users/` to retrieve users
-- `POST /users/` to create users
-- `PUT /users/{user_id}` to update users
-- `GET /items` to retrieve items
-- `POST /items/` to create items
-- `PUT /items/{item_id}` to update items
-- `POST /discount_codes/` to create discount codes
-- `POST /sales_items/` to create sales items
-- `GET /orders/current` to retrieve current orders
-- `GET /orders/history` to retrieve completed orders with sorting options
+- `GET /users/` retrieves users
+- `POST /users/` creates a user
+- `PUT /users/{user_id}` updates a user
+- `GET /items` retrieves items
+- `POST /items/` creates an item
+- `PUT /items/{item_id}` updates an item
+- `POST /discount_codes/` creates a discount code
+- `POST /sales_items/` creates a sales item
+- `GET /orders/current` retrieves current orders
+- `GET /orders/history?sort_by=date|customer|amount` retrieves completed orders
 
-## Project Structure
+### Assistant Backend
 
-```text
-.
-+-- app.py                  # FastAPI application entry point
-+-- back_end/               # API routes, database setup, models, and security helpers
-+-- front-end/              # React + Vite frontend application
-|   +-- Dockerfile          # Multi-stage frontend container build
-|   +-- src/components/     # Product, search, cart, checkout, and category components
-|   +-- src/hooks/          # Shared frontend hooks
-|   +-- src/layouts/        # Navigation, page layout, login, and register views
-+-- pyproject.toml          # Python project metadata and PDM scripts
-+-- README.md
-```
+- `GET /` confirms the assistant API is running
+- `GET /inventory` fetches and normalizes inventory from the main backend
+- `POST /assistant/chat` returns a Foodie AI chat response
+
+## Assistant Behavior
+
+Foodie AI is designed to help shoppers make decisions without taking direct action for them.
+
+- It can suggest in-stock products from the provided inventory.
+- It can turn recipes or meal ideas into shopping suggestions.
+- It can identify likely missing ingredients and substitutions.
+- It asks clarifying questions when the request is ambiguous.
+- It never claims to add, remove, purchase, or reserve cart items.
+- It keeps final cart changes under explicit user control in the frontend.
+
+## Troubleshooting
+
+If the frontend says it cannot reach Foodie AI, make sure `pdm run agent-dev` is running on port `8011` and that `VITE_AGENT_API_URL` matches that URL.
+
+If the assistant says the inventory service is unavailable, make sure `pdm run fastapi-dev` is running on port `8000` and that `INVENTORY_API_URL` points to `http://127.0.0.1:8000/items`.
+
+If the assistant returns fallback matches instead of richer AI responses, confirm `OPENAI_API_KEY` is set in `.env` and that `OPENAI_MODEL` is a model available to your OpenAI account.
+
+If database-backed routes fail, confirm MariaDB is running, the database exists, and all `DB_*` values in `.env` are populated.
