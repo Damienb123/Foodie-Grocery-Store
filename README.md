@@ -280,6 +280,10 @@ Foodie AI is designed to help shoppers make decisions without taking direct acti
 - It never claims to add, remove, purchase, or reserve cart items.
 - It keeps final cart changes under explicit user control in the frontend.
 
+## AI Assistant Demo
+<img width="1893" height="1014" alt="Screenshot 2026-05-03 182959" src="https://github.com/user-attachments/assets/4a4fedae-9949-4145-8eed-fe45021f1414" />
+
+
 ## Troubleshooting
 
 If the frontend says it cannot reach Foodie AI, make sure `pdm run agent-dev` is running on port `8011` and that `VITE_AGENT_API_URL` matches that URL.
